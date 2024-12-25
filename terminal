@@ -1,0 +1,6 @@
+nest new skill-matrix-backend
+cd skill-matrix-backend
+npm install @nestjs/typeorm typeorm mysql2 class-validator class-transformer bcrypt @nestjs/jwt @nestjs/passport passport passport-jwt nodemailer @types/passport-jwt -D ts-node @types/node @nestjs/mapped-types @nestjs/cors @nestjs/platform-express csv-parse multer @types/multer
+mkdir src/migrations
+mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS skill_matrix"
+npm run migration:run
