@@ -16,8 +16,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagg
 import { HelpdeskService } from './helpdesk.service';
 import { CreateTicketDto, UpdateTicketDto, TicketFilterDto } from './dto/helpdesk.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RoleGuard } from '../admin/role.guard';
-import { Roles } from '../admin/roles.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
 
 @ApiTags('Help Desk')
 @ApiBearerAuth()
@@ -27,34 +26,33 @@ export class HelpdeskController {
   constructor(private readonly helpdeskService: HelpdeskService) {}
 
   @Post('tickets')
-  @ApiOperation({ summary: 'Create new help desk ticket' })
-  async createTicket(
-    @Request() req,
-    @Body() createTicketDto: CreateTicketDto,
-  ) {
+  @ApiOperation({ summary: 'Create a new ticket' })
+  createTicket(@Request() req, @Body() createTicketDto: CreateTicketDto) {
     return this.helpdeskService.createTicket(req.user.id, createTicketDto);
   }
 
   @Get('tickets')
-  @ApiOperation({ summary: 'Get filtered help desk tickets' })
-  async getTickets(
-    @Query() filterDto: TicketFilterDto,
-    @Request() req,
-  ) {
-    const userId = req.user.role === 'admin' ? undefined : req.user.id;
-    return this.helpdeskService.getTickets(filterDto, userId);
+  @ApiOperation({ summary: 'Get tickets based on role' })
+  getTickets(@Request() req, @Query() filterDto: TicketFilterDto) {
+    if (req.user.role === 'admin') {
+      return this.helpdeskService.getAllTickets(filterDto);
+    }
+    return this.helpdeskService.getUserTickets(req.user.id, filterDto);
   }
 
   @Get('tickets/:id')
-  @ApiOperation({ summary: 'Get ticket by ID' })
-  async getTicketById(@Param('id') id: string) {
-    return this.helpdeskService.getTicketById(id);
+  @ApiOperation({ summary: 'Get ticket by id' })
+  getTicket(@Request() req, @Param('id') id: string) {
+    if (req.user.role === 'admin') {
+      return this.helpdeskService.getTicketById(id);
+    }
+    return this.helpdeskService.getUserTicketById(req.user.id, id);
   }
 
   @Patch('tickets/:id')
   @Roles('admin')
-  @ApiOperation({ summary: 'Update ticket status or assign admin' })
-  async updateTicket(
+  @ApiOperation({ summary: 'Update ticket status and assign admin (Admin only)' })
+  updateTicket(
     @Param('id') id: string,
     @Body() updateTicketDto: UpdateTicketDto,
     @Request() req,
@@ -64,8 +62,8 @@ export class HelpdeskController {
 
   @Get('stats')
   @Roles('admin')
-  @ApiOperation({ summary: 'Get help desk statistics' })
-  async getStats() {
+  @ApiOperation({ summary: 'Get helpdesk statistics (Admin only)' })
+  getStats() {
     return this.helpdeskService.getTicketStats();
   }
 } 

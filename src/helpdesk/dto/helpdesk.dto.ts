@@ -24,15 +24,10 @@ export class UpdateTicketDto {
   @IsOptional()
   status?: TicketStatus;
 
-  @ApiProperty()
+  @ApiProperty({ required: false })
+  @IsOptional()
   @IsString()
-  @IsOptional()
   adminNotes?: string;
-
-  @ApiProperty()
-  @IsUUID()
-  @IsOptional()
-  assignedAdminId?: string;
 }
 
 export class TicketFilterDto {
@@ -51,7 +46,6 @@ export class TicketFilterDto {
   @IsString()
   queryType?: string;
 }
-
 export class TicketResponseDto {
   @ApiProperty()
   @IsString()

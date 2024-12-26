@@ -1,9 +1,9 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like, In } from 'typeorm';
+import { Repository, Like } from 'typeorm';
 import { HelpDeskTicket, TicketStatus } from '../entities/help-desk-ticket.entity';
-import { User } from '../entities/user.entity';
 import { CreateTicketDto, UpdateTicketDto, TicketFilterDto } from './dto/helpdesk.dto';
+import { User } from '../entities/user.entity';
 
 @Injectable()
 export class HelpdeskService {
@@ -37,34 +37,52 @@ export class HelpdeskService {
     return this.ticketRepository.save(ticket);
   }
 
-  async getTickets(filterDto: TicketFilterDto, userId?: string): Promise<HelpDeskTicket[]> {
-    const { search, status, queryType } = filterDto;
-    const query = this.ticketRepository.createQueryBuilder('ticket')
-      .leftJoinAndSelect('ticket.submittedBy', 'submittedBy')
-      .leftJoinAndSelect('ticket.assignedAdmin', 'assignedAdmin');
 
-    if (userId) {
-      query.where('submittedBy.id = :userId', { userId });
+  getAllTickets(filterDto: TicketFilterDto) {
+    const query = this.ticketRepository.createQueryBuilder('ticket')
+      .leftJoinAndSelect('ticket.submittedBy', 'user')
+      .leftJoinAndSelect('ticket.assignedAdmin', 'admin');
+
+    if (filterDto.status) {
+      query.andWhere('ticket.status = :status', { status: filterDto.status });
     }
 
-    if (search) {
+    if (filterDto.queryType) {
+      query.andWhere('ticket.queryType = :queryType', { queryType: filterDto.queryType });
+    }
+
+    if (filterDto.search) {
       query.andWhere(
-        '(ticket.ticketId LIKE :search OR ticket.description LIKE :search)',
-        { search: `%${search}%` }
+        '(ticket.description LIKE :search OR ticket.ticketId LIKE :search)',
+        { search: `%${filterDto.search}%` }
       );
     }
 
-    if (status) {
-      query.andWhere('ticket.status = :status', { status });
+    return query.orderBy('ticket.createdAt', 'DESC').getMany();
+  }
+
+  async getUserTickets(userId: string, filterDto: TicketFilterDto): Promise<HelpDeskTicket[]> {
+    const query = this.ticketRepository.createQueryBuilder('ticket')
+      .leftJoinAndSelect('ticket.submittedBy', 'submittedBy')
+      .leftJoinAndSelect('ticket.assignedAdmin', 'assignedAdmin')
+      .where('ticket.submittedById = :userId', { userId });
+
+    if (filterDto.status) {
+      query.andWhere('ticket.status = :status', { status: filterDto.status });
     }
 
-    if (queryType) {
-      query.andWhere('ticket.queryType = :queryType', { queryType });
+    if (filterDto.queryType) {
+      query.andWhere('ticket.queryType = :queryType', { queryType: filterDto.queryType });
     }
 
-    query.orderBy('ticket.createdAt', 'DESC');
+    if (filterDto.search) {
+      query.andWhere(
+        '(ticket.description LIKE :search OR ticket.ticketId LIKE :search)',
+        { search: `%${filterDto.search}%` }
+      );
+    }
 
-    return query.getMany();
+    return query.orderBy('ticket.createdAt', 'DESC').getMany();
   }
 
   async getTicketById(id: string): Promise<HelpDeskTicket> {
@@ -80,21 +98,40 @@ export class HelpdeskService {
     return ticket;
   }
 
-  async updateTicket(id: string, updateTicketDto: UpdateTicketDto, adminId: string): Promise<HelpDeskTicket> {
-    const ticket = await this.getTicketById(id);
-    
-    if (updateTicketDto.assignedAdminId) {
-      const admin = await this.userRepository.findOne({
-        where: { id: updateTicketDto.assignedAdminId, role: 'admin' }
-      });
-      
-      if (!admin) {
-        throw new BadRequestException('Invalid admin ID');
-      }
-      ticket.assignedAdmin = admin;
+  async getUserTicketById(userId: string, id: string): Promise<HelpDeskTicket> {
+    const ticket = await this.ticketRepository.createQueryBuilder('ticket')
+      .leftJoinAndSelect('ticket.submittedBy', 'submittedBy')
+      .leftJoinAndSelect('ticket.assignedAdmin', 'assignedAdmin')
+      .where('ticket.id = :id ', { id })
+      .getOne();
+
+    if (!ticket) {
+      throw new NotFoundException('Ticket not found');
     }
 
-    Object.assign(ticket, updateTicketDto);
+    return ticket;
+  }
+
+  async updateTicket(
+    id: string,
+    updateTicketDto: UpdateTicketDto,
+    adminId: string,
+  ): Promise<HelpDeskTicket> {
+    const ticket = await this.getTicketById(id);
+    const admin = await this.userRepository.findOne({ where: { id: adminId } });
+    if (!admin) {
+      throw new NotFoundException('Admin not found');
+    }
+
+    if (updateTicketDto.status) {
+      ticket.status = updateTicketDto.status;
+    }
+
+    if (updateTicketDto.adminNotes) {
+      ticket.adminNotes = updateTicketDto.adminNotes;
+    }
+
+    ticket.assignedAdmin = admin;
     return this.ticketRepository.save(ticket);
   }
 
@@ -106,9 +143,19 @@ export class HelpdeskService {
       .groupBy('ticket.status')
       .getRawMany();
 
-    return stats.reduce((acc, curr) => {
-      acc[curr.status] = parseInt(curr.count);
-      return acc;
-    }, {});
+    const totalTickets = await this.ticketRepository.count();
+    const openTickets = await this.ticketRepository.count({ where: { status: TicketStatus.OPEN } });
+    const resolvedTickets = await this.ticketRepository.count({ where: { status: TicketStatus.RESOLVED } });
+
+    return {
+      totalTickets,
+      openTickets,
+      resolvedTickets,
+      resolutionRate: totalTickets ? (resolvedTickets / totalTickets) * 100 : 0,
+      statusDistribution: stats.reduce((acc, curr) => {
+        acc[curr.status] = parseInt(curr.count);
+        return acc;
+      }, {}),
+    };
   }
 } 

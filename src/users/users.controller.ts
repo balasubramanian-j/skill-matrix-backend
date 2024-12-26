@@ -1,9 +1,11 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { UpdateSkillExpectedLevelDto } from './dto/update-skill-expected-level.dto';
 
 @ApiTags('Users')
 @ApiBearerAuth()
@@ -98,5 +100,23 @@ export class UsersController {
   @ApiResponse({ status: 404, description: 'User not found' })
   activate(@Param('id') id: string) {
     return this.usersService.activate(id);
+  }
+
+  @Patch('team-members/:memberId/skills/:skillId')
+  @Roles('manager')
+  @ApiOperation({ summary: 'Update team member skill expected level' })
+  @ApiResponse({ status: 200, description: 'Expected level updated successfully' })
+  async updateTeamMemberSkillLevel(
+    @Param('memberId') memberId: string,
+    @Param('skillId') skillId: string,
+    @Body() updateDto: UpdateSkillExpectedLevelDto,
+    @Request() req,
+  ) {
+    return this.usersService.updateTeamMemberSkillLevel(
+      req.user.id,
+      memberId,
+      skillId,
+      updateDto.expectedLevel
+    );
   }
 } 

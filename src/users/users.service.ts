@@ -1,16 +1,20 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import * as bcrypt from 'bcrypt';
+import { SkillLevel } from '../common/enums/skill.enum';
+import { SkillAssessment } from '../entities/skill-assessment.entity';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(User)
     private usersRepository: Repository<User>,
+    @InjectRepository(SkillAssessment)
+    private skillAssessmentRepository: Repository<SkillAssessment>,
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<User> {
@@ -97,5 +101,37 @@ export class UsersService {
     const user = await this.findOne(id);
     user.isActive = true;
     return this.usersRepository.save(user);
+  }
+
+  async updateTeamMemberSkillLevel(
+    managerId: string,
+    memberId: string,
+    skillId: string,
+    expectedLevel: SkillLevel,
+  ): Promise<SkillAssessment> {
+    // Verify manager has access to this team member
+    const teamMember = await this.usersRepository.findOne({
+      where: { id: memberId, reportingManager: { id: managerId } },
+      relations: ['reportingManager'],
+    });
+
+    if (!teamMember) {
+      throw new ForbiddenException('You can only update skills for your team members');
+    }
+
+    // Find the skill assessment
+    const skillAssessment = await this.skillAssessmentRepository.findOne({
+      where: { userId: memberId, skillId },
+    });
+
+    if (!skillAssessment) {
+      throw new NotFoundException('Skill assessment not found');
+    }
+
+    // Update expected level
+    skillAssessment.expectedLevel = expectedLevel;
+    
+    // Save and return updated assessment
+    return this.skillAssessmentRepository.save(skillAssessment);
   }
 } 
