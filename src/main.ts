@@ -9,6 +9,9 @@ import * as path from 'path';
 import * as puppeteer from 'puppeteer';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { Request, Response } from 'express';
+import * as dotenv from 'dotenv';
+
+dotenv.config();
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);

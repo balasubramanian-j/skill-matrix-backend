@@ -35,15 +35,20 @@ export class AuthService {
     return this.jwtService.sign(payload, { expiresIn: '24h' });
   }
 
-  private async sendResetEmail(email: string, otp: string): Promise<void> {
+  private async sendResetEmail(user: User, otp: string): Promise<void> {
     await this.transporter.sendMail({
-      to: email,
+      to: user.officialEmail,
       subject: 'Password Reset Code',
       html: `
         <h1>Password Reset Request</h1>
-        <p>Your password reset code is: <strong>${otp}</strong></p>
-        <p>This code will expire in 24 hours.</p>
-        <p>If you didn't request this, please ignore this email.</p>
+        <p>Dear ${user.employeeName},</p>
+        <p>We received a request to reset your password for your [Service/App Name] account. To proceed, please use the code below to verify your request:</p>
+        <p>Your Password Reset Code: <strong>${otp}</strong></p>
+        <p>This code is valid for the next 24 hours. After that, you will need to request a new code.</p>
+        <p>If you did not request a password reset, please ignore this email. Your account will remain secure.</p>
+        <p>For further assistance, feel free to reach out to us at [Support Email/Phone].</p>
+        <p>Thank you,</p>
+        <p>[Your Company/Service Name]</p>
       `,
     });
   }
@@ -96,7 +101,7 @@ export class AuthService {
     await this.userRepository.save(user);
 
     // Send OTP via email
-    await this.sendResetEmail(email, otp);
+    await this.sendResetEmail(user, otp);
 
     return { message: 'Reset code sent to your email' };
   }

@@ -25,11 +25,23 @@ export class DashboardService {
   ) {}
 
   async getDashboardMetrics() {
-    const [totalEmployees, totalSkills, skillAssessments] = await Promise.all([
+    const [totalEmployees, totalManagers, totalBusinessUnits, skillAssessments] = await Promise.all([
       this.userRepository.count(),
-      this.skillRepository.count(),
-      this.assessmentRepository.find(),
+      
+      this.userRepository.count({ where: { role: 'manager' } }),
+      
+      this.userRepository.createQueryBuilder('user')
+        .select('DISTINCT user.businessUnit')
+        .getRawMany()
+        .then(users => users.length),
+      
+      this.assessmentRepository.createQueryBuilder('sa')
+        .leftJoinAndSelect('sa.skill', 'skill')
+        .getMany()
     ]);
+
+    const distinctSkills = new Set(skillAssessments.map(assessment => assessment.skillId));
+    const totalSkills = distinctSkills.size;
 
     const meetingExpectations = skillAssessments.filter(
       assessment => assessment.currentLevel >= assessment.expectedLevel
@@ -40,6 +52,8 @@ export class DashboardService {
 
     return {
       totalEmployees,
+      totalManagers,
+      totalBusinessUnits,
       totalSkills,
       percentageMeetingExpectations: Math.round(percentageMeetingExpectations),
     };
